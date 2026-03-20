@@ -1,0 +1,364 @@
+import json
+import os
+from typing import Dict, List, Optional
+from datetime import datetime
+
+class Patient:
+    """Класс, представляющий пациента"""
+    
+    def __init__(self, full_name: str, age: int, phone: str, address: str):
+        self.full_name = full_name
+        self.age = age
+        self.phone = phone
+        self.address = address
+        self.diagnoses = []
+        self.allergies = []
+        self.medical_history = []
+    
+    def add_diagnosis(self, diagnosis: str, doctor_specialty: str, doctor_name: str):
+        self.diagnoses.append({
+            'diagnosis': diagnosis,
+            'doctor_specialty': doctor_specialty,
+            'doctor_name': doctor_name,
+            'date': datetime.now().strftime("%d.%m.%Y")
+        })
+    
+    def add_allergy(self, allergy: str):
+        if allergy not in self.allergies:
+            self.allergies.append(allergy)
+    
+    def add_visit(self, doctor_specialty: str, doctor_name: str, complaints: str):
+        self.medical_history.append({
+            'doctor_specialty': doctor_specialty,
+            'doctor_name': doctor_name,
+            'complaints': complaints,
+            'date': datetime.now().strftime("%d.%m.%Y")
+        })
+    
+    def to_dict(self) -> dict:
+        return {
+            'full_name': self.full_name,
+            'age': self.age,
+            'phone': self.phone,
+            'address': self.address,
+            'diagnoses': self.diagnoses,
+            'allergies': self.allergies,
+            'medical_history': self.medical_history
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Patient':
+        patient = cls(
+            data['full_name'],
+            data['age'],
+            data['phone'],
+            data['address']
+        )
+        patient.diagnoses = data.get('diagnoses', [])
+        patient.allergies = data.get('allergies', [])
+        patient.medical_history = data.get('medical_history', [])
+        return patient
+
+
+class HospitalCRM:
+    
+    SPECIALTIES = {
+        '1': 'Терапевт',
+        '2': 'Травматолог',
+        '3': 'Кардиолог',
+        '4': 'Невролог',
+        '5': 'Офтальмолог',
+        '6': 'Отоларинголог (ЛОР)',
+        '7': 'Хирург',
+        '8': 'Педиатр'
+    }
+    
+    def __init__(self, data_file: str = 'hospital_data.json'):
+        self.data_file = data_file
+        self.patients: Dict[str, Patient] = {}
+        self.current_doctor: Optional[str] = None
+        self.load_data()
+    
+    def load_data(self):
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    for full_name, patient_data in data.items():
+                        self.patients[full_name] = Patient.from_dict(patient_data)
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Ошибка загрузки данных: {e}")
+    
+    def save_data(self):
+        data = {}
+        for full_name, patient in self.patients.items():
+            data[full_name] = patient.to_dict()
+        
+        with open(self.data_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    def select_specialty(self) -> bool:
+        print("\n" + "="*50)
+        print("ВЫБОР СПЕЦИАЛЬНОСТИ")
+        print("="*50)
+        
+        for key, specialty in self.SPECIALTIES.items():
+            print(f"{key}. {specialty}")
+        print("0. Выход")
+        
+        choice = input("\nВыберите специальность: ").strip()
+        
+        if choice == '0':
+            return False
+        elif choice in self.SPECIALTIES:
+            self.current_doctor = self.SPECIALTIES[choice]
+            print(f"\n✓ Вы вошли как {self.current_doctor}")
+            return True
+        else:
+            print("\n✗ Неверный выбор. Попробуйте снова.")
+            return self.select_specialty()
+    
+    def find_patient(self, full_name: str) -> Optional[Patient]:
+        if full_name in self.patients:
+            return self.patients[full_name]
+        
+        matches = [name for name in self.patients.keys() if full_name.lower() in name.lower()]
+        
+        if len(matches) == 1:
+            print(f"\nНайден пациент: {matches[0]}")
+            return self.patients[matches[0]]
+        elif len(matches) > 1:
+            print("\nНайдено несколько пациентов:")
+            for i, name in enumerate(matches, 1):
+                print(f"{i}. {name}")
+            choice = input("Выберите номер или нажмите Enter для отмены: ").strip()
+            if choice.isdigit() and 1 <= int(choice) <= len(matches):
+                return self.patients[matches[int(choice)-1]]
+        
+        return None
+    
+    def create_patient(self) -> Patient:
+        print("\n" + "-"*30)
+        print("РЕГИСТРАЦИЯ НОВОГО ПАЦИЕНТА")
+        print("-"*30)
+        
+        full_name = input("ФИО пациента: ").strip()
+        
+        if full_name in self.patients:
+            print("\nПациент с таким ФИО уже существует!")
+            return self.patients[full_name]
+        
+        try:
+            age = int(input("Возраст: ").strip())
+            phone = input("Телефон: ").strip()
+            address = input("Адрес: ").strip()
+            
+            patient = Patient(full_name, age, phone, address)
+            self.patients[full_name] = patient
+            self.save_data()
+            print(f"\n✓ Пациент {full_name} успешно зарегистрирован!")
+            return patient
+        except ValueError:
+            print("\n✗ Ошибка: возраст должен быть числом!")
+            return self.create_patient()
+    
+    def view_patient_info(self, patient: Patient):
+        print("\n" + "="*50)
+        print(f"ИНФОРМАЦИЯ О ПАЦИЕНТЕ: {patient.full_name}")
+        print("="*50)
+        
+        print(f"\n📋 ОСНОВНАЯ ИНФОРМАЦИЯ:")
+        print(f"  ФИО: {patient.full_name}")
+        print(f"  Возраст: {patient.age}")
+        print(f"  Телефон: {patient.phone}")
+        print(f"  Адрес: {patient.address}")
+        
+        if patient.diagnoses:
+            print(f"\n🏥 ДИАГНОЗЫ (по {self.current_doctor}):")
+            doctor_diagnoses = [d for d in patient.diagnoses if d['doctor_specialty'] == self.current_doctor]
+            
+            if doctor_diagnoses:
+                for diag in doctor_diagnoses:
+                    print(f"  • {diag['diagnosis']}")
+                    print(f"    (Врач: {diag['doctor_name']}, Дата: {diag['date']})")
+            else:
+                print(f"  Нет диагнозов по специальности '{self.current_doctor}'")
+            
+            print(f"\n📊 ВСЕ ДИАГНОЗЫ:")
+            for diag in patient.diagnoses:
+                print(f"  • [{diag['doctor_specialty']}] {diag['diagnosis']} - {diag['doctor_name']} ({diag['date']})")
+        else:
+            print(f"\n🏥 ДИАГНОЗЫ:")
+            print("  Нет зарегистрированных диагнозов")
+        
+        if patient.allergies:
+            print(f"\n⚠️ АЛЛЕРГИИ:")
+            for allergy in patient.allergies:
+                print(f"  • {allergy}")
+        else:
+            print(f"\n⚠️ АЛЛЕРГИИ:")
+            print("  Не зарегистрировано")
+        
+        if patient.medical_history:
+            print(f"\n📅 ИСТОРИЯ ПОСЕЩЕНИЙ:")
+            for visit in patient.medical_history:
+                print(f"  • {visit['date']} - {visit['doctor_specialty']} {visit['doctor_name']}")
+                print(f"    Жалобы: {visit['complaints']}")
+        else:
+            print(f"\n📅 ИСТОРИЯ ПОСЕЩЕНИЙ:")
+            print("  Нет записей")
+    
+    def add_diagnosis_to_patient(self, patient: Patient):
+        print("\n" + "-"*30)
+        print("ДОБАВЛЕНИЕ ДИАГНОЗА")
+        print("-"*30)
+        
+        diagnosis = input("Введите диагноз: ").strip()
+        if diagnosis:
+            patient.add_diagnosis(diagnosis, self.current_doctor, self.current_doctor)
+            self.save_data()
+            print(f"\n✓ Диагноз '{diagnosis}' добавлен!")
+        else:
+            print("\n✗ Диагноз не может быть пустым!")
+    
+    def add_allergy_to_patient(self, patient: Patient):
+        print("\n" + "-"*30)
+        print("ДОБАВЛЕНИЕ АЛЛЕРГИИ")
+        print("-"*30)
+        
+        allergy = input("Введите аллергию: ").strip()
+        if allergy:
+            patient.add_allergy(allergy)
+            self.save_data()
+            print(f"\n✓ Аллергия '{allergy}' добавлена!")
+        else:
+            print("\n✗ Аллергия не может быть пустой!")
+    
+    def add_visit_record(self, patient: Patient):
+        print("\n" + "-"*30)
+        print("ЗАПИСЬ ПОСЕЩЕНИЯ")
+        print("-"*30)
+        
+        complaints = input("Жалобы пациента: ").strip()
+        if complaints:
+            patient.add_visit(self.current_doctor, self.current_doctor, complaints)
+            self.save_data()
+            print(f"\n✓ Посещение зарегистрировано!")
+        else:
+            print("\n✗ Жалобы не могут быть пустыми!")
+    
+    def doctor_menu(self):
+        while True:
+            print("\n" + "="*50)
+            print(f"ГЛАВНОЕ МЕНЮ - {self.current_doctor}")
+            print("="*50)
+            print("1. Найти пациента по ФИО")
+            print("2. Просмотреть информацию о пациенте")
+            print("3. Добавить диагноз пациенту")
+            print("4. Добавить аллергию пациенту")
+            print("5. Зарегистрировать посещение")
+            print("6. Создать нового пациента")
+            print("7. Список всех пациентов")
+            print("0. Выйти из системы")
+            print("-"*50)
+            
+            choice = input("Выберите действие: ").strip()
+            
+            if choice == '0':
+                print("\nВыход из системы. До свидания!")
+                self.save_data()
+                return False
+            elif choice == '1':
+                full_name = input("\nВведите ФИО пациента: ").strip()
+                if full_name:
+                    patient = self.find_patient(full_name)
+                    if patient:
+                        self.view_patient_info(patient)
+                    else:
+                        print(f"\nПациент '{full_name}' не найден.")
+                        create = input("Создать нового пациента? (да/нет): ").strip().lower()
+                        if create in ['да', 'yes', 'y', 'д']:
+                            self.create_patient()
+                else:
+                    print("\nФИО не может быть пустым!")
+            
+            elif choice == '2':
+                full_name = input("\nВведите ФИО пациента: ").strip()
+                if full_name:
+                    patient = self.find_patient(full_name)
+                    if patient:
+                        self.view_patient_info(patient)
+                    else:
+                        print(f"\nПациент '{full_name}' не найден.")
+                else:
+                    print("\nФИО не может быть пустым!")
+            
+            elif choice == '3':
+                full_name = input("\nВведите ФИО пациента: ").strip()
+                if full_name:
+                    patient = self.find_patient(full_name)
+                    if patient:
+                        self.add_diagnosis_to_patient(patient)
+                    else:
+                        print(f"\nПациент '{full_name}' не найден.")
+                else:
+                    print("\nФИО не может быть пустым!")
+            
+            elif choice == '4':
+                full_name = input("\nВведите ФИО пациента: ").strip()
+                if full_name:
+                    patient = self.find_patient(full_name)
+                    if patient:
+                        self.add_allergy_to_patient(patient)
+                    else:
+                        print(f"\nПациент '{full_name}' не найден.")
+                else:
+                    print("\nФИО не может быть пустым!")
+            
+            elif choice == '5':
+                full_name = input("\nВведите ФИО пациента: ").strip()
+                if full_name:
+                    patient = self.find_patient(full_name)
+                    if patient:
+                        self.add_visit_record(patient)
+                    else:
+                        print(f"\nПациент '{full_name}' не найден.")
+                else:
+                    print("\nФИО не может быть пустым!")
+            
+            elif choice == '6':
+                self.create_patient()
+            
+            elif choice == '7':
+                if self.patients:
+                    print("\n" + "="*50)
+                    print("СПИСОК ВСЕХ ПАЦИЕНТОВ")
+                    print("="*50)
+                    for i, (name, patient) in enumerate(self.patients.items(), 1):
+                        print(f"{i}. {name} (Возраст: {patient.age})")
+                    print(f"\nВсего пациентов: {len(self.patients)}")
+                else:
+                    print("\nНет зарегистрированных пациентов.")
+            
+            else:
+                print("\n✗ Неверный выбор. Попробуйте снова.")
+    
+    def run(self):
+        print("\n" + "="*50)
+        print("ДОБРО ПОЖАЛОВАТЬ В CRM СИСТЕМУ БОЛЬНИЦЫ")
+        print("="*50)
+        
+        while True:
+            if not self.select_specialty():
+                break
+            
+            if not self.doctor_menu():
+                break
+
+
+def main():
+    crm = HospitalCRM()
+    crm.run()
+
+if __name__ == "__main__":
+    main()
